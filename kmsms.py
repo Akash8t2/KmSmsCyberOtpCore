@@ -11,8 +11,8 @@ import html
 
 # ================= CONFIG =================
 
-# AJAX URL - new website
-AJAX_URL = "http://109.236.84.81/ints/client/res/data_smscdr.php"
+# AJAX URL - AGENT interface (9 columns)
+AJAX_URL = "http://54.36.173.235/ints/agent/res/data_smscdr.php"
 
 # Bot Configuration - ALL from environment variables
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
@@ -29,7 +29,7 @@ HEADERS = {
     "X-Requested-With": "XMLHttpRequest",
     "Accept": "application/json, text/javascript, */*; q=0.01",
     "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "http://109.236.84.81/ints/client/smscdr.php",
+    "Referer": "http://54.36.173.235/ints/agent/smscdr.php",
     "Connection": "keep-alive",
     "Cache-Control": "no-cache",
     "Pragma": "no-cache"
@@ -45,8 +45,6 @@ NUMBERS_URL_1 = os.getenv("NUMBERS_URL_1", "https://t.me/alltgmethod11")
 NUMBERS_URL_2 = os.getenv("NUMBERS_URL_2", "https://t.me/CyberOTPCore")
 SUPPORT_URL_1 = os.getenv("SUPPORT_URL_1", "https://t.me/+zu_E8bhN0WU5OTNl")
 SUPPORT_URL_2 = os.getenv("SUPPORT_URL_2", "https://t.me/CYBER_OTP1_CORE")
-
-
 
 # =========================================
 
@@ -124,7 +122,7 @@ def clean_phone_number(number):
     return number
 
 def build_payload():
-    """Build AJAX payload for the new URL"""
+    """Build AJAX payload for AGENT interface (9 columns)"""
     today = datetime.now().strftime("%Y-%m-%d")
     timestamp = int(time.time() * 1000)
     
@@ -132,17 +130,19 @@ def build_payload():
         "fdate1": f"{today} 00:00:00",
         "fdate2": f"{today} 23:59:59",
         "frange": "",
+        "fclient": "",  # Different from client interface
         "fnum": "",
         "fcli": "",
         "fgdate": "",
         "fgmonth": "",
         "fgrange": "",
+        "fgclient": "",  # Different from client interface
         "fgnumber": "",
         "fgcli": "",
         "fg": 0,
         "sEcho": 1,
-        "iColumns": 7,
-        "sColumns": ",,,,,,",
+        "iColumns": 9,  # 9 columns for agent interface
+        "sColumns": ",,,,,,,,",  # 8 commas for 9 columns
         "iDisplayStart": 0,
         "iDisplayLength": 25,
         "mDataProp_0": 0,
@@ -180,6 +180,16 @@ def build_payload():
         "bRegex_6": "false",
         "bSearchable_6": "true",
         "bSortable_6": "true",
+        "mDataProp_7": 7,
+        "sSearch_7": "",
+        "bRegex_7": "false",
+        "bSearchable_7": "true",
+        "bSortable_7": "true",
+        "mDataProp_8": 8,
+        "sSearch_8": "",
+        "bRegex_8": "false",
+        "bSearchable_8": "true",
+        "bSortable_8": "false",
         "sSearch": "",
         "bRegex": "false",
         "iSortCol_0": 0,
@@ -191,13 +201,22 @@ def build_payload():
     return params
 
 def format_message(row):
-    """Format SMS data into HTML Telegram message"""
+    """Format SMS data into HTML Telegram message for AGENT interface (9 columns)"""
     try:
+        # AGENT interface has 9 columns
+        # Based on sample: [date, route, number, service, null, message, currency, cost, status]
         date = row[0] if len(row) > 0 else "N/A"
         route = row[1] if len(row) > 1 else "Unknown"
         number = clean_phone_number(row[2]) if len(row) > 2 else "N/A"
         service = row[3] if len(row) > 3 else "Unknown"
-        message = row[4] if len(row) > 4 else ""
+        
+        # Message might be in column 5 (index 5) for agent interface
+        # Check both column 4 and 5
+        message = ""
+        if len(row) > 5 and row[5]:
+            message = row[5]
+        elif len(row) > 4 and row[4]:
+            message = row[4]
         
         # Extract country from route
         country = "Unknown"
@@ -217,7 +236,7 @@ def format_message(row):
         safe_country = html.escape(str(country))
         safe_date = html.escape(str(date))
         
-        # Format message - use newlines instead of <br> tags
+        # Format message
         safe_message = html.escape(str(message))
         
         # Format as HTML with newlines
@@ -234,7 +253,7 @@ def format_message(row):
             f"💬 <b>Message Content</b>\n"
             f"<i>{safe_message}</i>\n"
             "━━━━━━━━━━━━━━━━━━━\n"
-            "⚡ <b>POWERED BY @Queenansari072</b>"
+            "⚡ <b>POWERED BY @Nexora_00</b>"
         )
         
         return formatted
@@ -290,7 +309,7 @@ def send_telegram(text, chat_id):
 # ================= CORE LOGIC =================
 
 def fetch_latest_sms():
-    """Fetch latest SMS from website"""
+    """Fetch latest SMS from AGENT website"""
     global STATE
     
     try:
@@ -320,11 +339,11 @@ def fetch_latest_sms():
         # Filter valid rows
         valid_rows = []
         for row in rows:
-            if not isinstance(row, list) or len(row) < 5:
+            if not isinstance(row, list) or len(row) < 6:  # At least 6 columns for agent
                 continue
             
-            # Skip summary rows
-            if isinstance(row[0], str) and row[0].startswith("0,0,0,"):
+            # Skip summary rows (they start with "0,0,0," or similar)
+            if isinstance(row[0], str) and (row[0].startswith("0,0,0,") or row[0].startswith("0,0.01,0,")):
                 continue
             
             # Check for valid date format
@@ -348,7 +367,11 @@ def fetch_latest_sms():
         newest = valid_rows[0]
         
         # Create unique ID
-        sms_id = f"{newest[0]}_{newest[2]}_{hash(str(newest[4])[:50])}"
+        sms_id = f"{newest[0]}_{newest[2]}"
+        if len(newest) > 5 and newest[5]:
+            sms_id += f"_{hash(str(newest[5])[:50])}"
+        elif len(newest) > 4 and newest[4]:
+            sms_id += f"_{hash(str(newest[4])[:50])}"
         
         # Check if already processed
         if STATE["last_uid"] == sms_id or sms_id in STATE.get("processed_ids", []):
@@ -413,9 +436,10 @@ def check_environment():
 def print_config():
     """Print configuration details"""
     logging.info("=" * 60)
-    logging.info("🚀 PREMIUM OTP BOT STARTED")
+    logging.info("🚀 PREMIUM OTP BOT STARTED (AGENT INTERFACE)")
     logging.info("=" * 60)
     logging.info(f"Website URL: {AJAX_URL}")
+    logging.info(f"Interface Type: AGENT (9 columns)")
     logging.info(f"Chat IDs: {', '.join(CHAT_IDS)}")
     logging.info(f"Check Interval: {CHECK_INTERVAL} seconds")
     logging.info("=" * 60)
